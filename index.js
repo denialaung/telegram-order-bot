@@ -8,7 +8,7 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const OWNER_ID = process.env.OWNER_ID; // Telegram ID of the bot owner
 
 // Google Sheets setup via Apps Script Web App
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz7Kms9dJ0khYPYV5n6oCQapuiTweXYsnAgxZ9Df-T47cebN1gSqVIbBOZN-3dg7n8P/exec';
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzqrqcNt-TVKtL0SKqLSlsVaHDcGfoEmOi88OZjhlmwKKUBLaw8GQ6R7cZQ6FKyaC47/exec';
 
 // Function to append order to Google Sheet
 async function appendToGoogleSheet(orderData) {
@@ -152,7 +152,8 @@ orderScene.on('photo', async (ctx) => {
         diamondAmount: order.diamondAmount,
         paymentMethod: order.paymentMethod,
         orderDateTime: orderDateTime,
-        status: status
+        status: status,
+        chatId: String(ctx.from.id)
       });
 
       let confirmationMessage = `${messages.orderConfirmation}\n\n`;
@@ -230,7 +231,8 @@ orderScene.on('text', async (ctx) => {
         diamondAmount: order.diamondAmount,
         paymentMethod: order.paymentMethod,
         orderDateTime: orderDateTime,
-        status: status
+        status: status,
+        chatId: String(ctx.from.id)
       });
 
       let confirmationMessage = `${messages.orderConfirmation}\n\n`;
