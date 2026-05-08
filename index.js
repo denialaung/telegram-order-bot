@@ -316,10 +316,11 @@ bot.use(session());
 bot.use(stage.middleware());
 
 // Start command with inline keyboard buttons
-bot.start((ctx) => {
-  ctx.reply(messages.welcome, Markup.inlineKeyboard([
-    [Markup.button.callback('💎 ဈေးနှုန်းကြည့်ရန်', 'view_prices')],
-    [Markup.button.callback('🛒 Order တင်ရန်', 'place_order')]
+bot.start(async (ctx) => {
+  await ctx.reply(messages.welcome);
+  await ctx.reply(priceList, Markup.inlineKeyboard([
+    [Markup.button.callback('💎 ဈေးနှုန်းကြည့်ရန်နှိပ်ပါ', 'view_prices')],
+    [Markup.button.callback('🛒 Order တင်ရန်နှိပ်ပါ', 'place_order')]
   ]));
 });
 
