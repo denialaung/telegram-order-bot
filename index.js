@@ -7,6 +7,30 @@ require('dotenv').config();
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const OWNER_ID = process.env.OWNER_ID; // Telegram ID of the bot owner
 
+// Google Sheets setup via Apps Script Web App
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz7Kms9dJ0khYPYV5n6oCQapuiTweXYsnAgxZ9Df-T47cebN1gSqVIbBOZN-3dg7n8P/exec';
+
+// Function to append order to Google Sheet
+async function appendToGoogleSheet(orderData) {
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(orderData),
+      redirect: 'follow'
+    });
+    
+    if (response.ok) {
+      console.log('Order appended to Google Sheet successfully');
+    } else {
+      console.log('Google Sheets append failed:', response.status);
+    }
+  } catch (err) {
+    console.error('Error appending to Google Sheet:', err.message);
+  }
+}
+
 const bot = new Telegraf(BOT_TOKEN);
 
 // Initialize SQLite database
@@ -111,6 +135,18 @@ orderScene.on('photo', async (ctx) => {
       const info = stmt.run(order.customerName, order.inGameName, order.mlbbId, order.diamondAmount, order.paymentMethod, order.screenshot, orderDateTime, status);
       const orderId = info.lastInsertRowid;
 
+      // Append to Google Sheet
+      appendToGoogleSheet({
+        orderId: orderId,
+        customerName: order.customerName,
+        inGameName: order.inGameName,
+        mlbbId: order.mlbbId,
+        diamondAmount: order.diamondAmount,
+        paymentMethod: order.paymentMethod,
+        orderDateTime: orderDateTime,
+        status: status
+      });
+
       let confirmationMessage = `${messages.orderConfirmation}\n\n`;
       confirmationMessage += `📝 မှာယူမှု ID: ${orderId}\n`;
       confirmationMessage += `👤 Customer Name: ${order.customerName}\n`;
@@ -176,6 +212,18 @@ orderScene.on('text', async (ctx) => {
       const stmt = db.prepare(`INSERT INTO orders (customerName, inGameName, mlbbId, diamondAmount, paymentMethod, screenshot, orderDateTime, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
       const info = stmt.run(order.customerName, order.inGameName, order.mlbbId, order.diamondAmount, order.paymentMethod, ctx.message.text, orderDateTime, status);
       const orderId = info.lastInsertRowid;
+
+      // Append to Google Sheet
+      appendToGoogleSheet({
+        orderId: orderId,
+        customerName: order.customerName,
+        inGameName: order.inGameName,
+        mlbbId: order.mlbbId,
+        diamondAmount: order.diamondAmount,
+        paymentMethod: order.paymentMethod,
+        orderDateTime: orderDateTime,
+        status: status
+      });
 
       let confirmationMessage = `${messages.orderConfirmation}\n\n`;
       confirmationMessage += `📝 မှာယူမှု ID: ${orderId}\n`;
