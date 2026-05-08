@@ -47,8 +47,16 @@ db.exec(`CREATE TABLE IF NOT EXISTS orders (
   paymentMethod TEXT,
   screenshot TEXT,
   orderDateTime TEXT,
-  status TEXT
+  status TEXT,
+  chatId TEXT
 )`);
+
+// Add chatId column if not exists (migration for existing db)
+try {
+  db.exec(`ALTER TABLE orders ADD COLUMN chatId TEXT`);
+} catch (e) {
+  // Column already exists, ignore
+}
 
 console.log('Connected to the SQLite database.');
 
@@ -131,8 +139,8 @@ orderScene.on('photo', async (ctx) => {
     const status = 'Pending';
 
     try {
-      const stmt = db.prepare(`INSERT INTO orders (customerName, inGameName, mlbbId, diamondAmount, paymentMethod, screenshot, orderDateTime, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-      const info = stmt.run(order.customerName, order.inGameName, order.mlbbId, order.diamondAmount, order.paymentMethod, order.screenshot, orderDateTime, status);
+      const stmt = db.prepare(`INSERT INTO orders (customerName, inGameName, mlbbId, diamondAmount, paymentMethod, screenshot, orderDateTime, status, chatId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      const info = stmt.run(order.customerName, order.inGameName, order.mlbbId, order.diamondAmount, order.paymentMethod, order.screenshot, orderDateTime, status, String(ctx.from.id));
       const orderId = info.lastInsertRowid;
 
       // Append to Google Sheet
@@ -209,8 +217,8 @@ orderScene.on('text', async (ctx) => {
     const status = 'Pending';
 
     try {
-      const stmt = db.prepare(`INSERT INTO orders (customerName, inGameName, mlbbId, diamondAmount, paymentMethod, screenshot, orderDateTime, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-      const info = stmt.run(order.customerName, order.inGameName, order.mlbbId, order.diamondAmount, order.paymentMethod, ctx.message.text, orderDateTime, status);
+      const stmt = db.prepare(`INSERT INTO orders (customerName, inGameName, mlbbId, diamondAmount, paymentMethod, screenshot, orderDateTime, status, chatId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      const info = stmt.run(order.customerName, order.inGameName, order.mlbbId, order.diamondAmount, order.paymentMethod, ctx.message.text, orderDateTime, status, String(ctx.from.id));
       const orderId = info.lastInsertRowid;
 
       // Append to Google Sheet
@@ -287,33 +295,55 @@ statusScene.on('text', async (ctx) => {
         return ctx.scene.leave();
       }
       statusUpdate.orderId = orderId;
-      await ctx.reply(messages.askNewStatus);
+      await ctx.reply('Status ရွေးပါ:', Markup.inlineKeyboard([
+        [Markup.button.callback('⏳ Pending', `status_pending_${orderId}`)],
+        [Markup.button.callback('✅ Done', `status_done_${orderId}`)]
+      ]));
+      ctx.scene.leave();
     } catch (err) {
       console.error('Error fetching order:', err.message);
       await ctx.reply(messages.invalidOrderId);
       return ctx.scene.leave();
     }
-  } else if (!statusUpdate.newStatus) {
-    statusUpdate.newStatus = ctx.message.text;
-    try {
-      const stmt = db.prepare(`UPDATE orders SET status = ? WHERE id = ?`);
-      const info = stmt.run(statusUpdate.newStatus, statusUpdate.orderId);
-      if (info.changes === 0) {
-        ctx.reply(messages.invalidOrderId);
-      } else {
-        ctx.reply(messages.orderStatusUpdated);
-      }
-    } catch (err) {
-      console.error('Error updating status:', err.message);
-      ctx.reply('အခြေအနေပြောင်းလဲရာတွင်အမှားအယွင်းဖြစ်ပွားခဲ့ပါသည်။');
-    }
-    ctx.scene.leave();
   }
 });
 
 const stage = new Stage([orderScene, statusScene]);
 bot.use(session());
 bot.use(stage.middleware());
+
+// Handle status button callbacks
+bot.action(/status_pending_(\d+)/, async (ctx) => {
+  const orderId = ctx.match[1];
+  await ctx.answerCbQuery();
+  try {
+    const stmt = db.prepare(`UPDATE orders SET status = ? WHERE id = ?`);
+    stmt.run('Pending', orderId);
+    await ctx.editMessageText(`Order #${orderId} - Status: ⏳ Pending`);
+  } catch (err) {
+    console.error('Error updating status:', err.message);
+  }
+});
+
+bot.action(/status_done_(\d+)/, async (ctx) => {
+  const orderId = ctx.match[1];
+  await ctx.answerCbQuery();
+  try {
+    const stmt = db.prepare(`UPDATE orders SET status = ? WHERE id = ?`);
+    stmt.run('Done', orderId);
+    await ctx.editMessageText(`Order #${orderId} - Status: ✅ Done`);
+    
+    // Send success message to customer
+    const orderStmt = db.prepare(`SELECT chatId, customerName FROM orders WHERE id = ?`);
+    const order = orderStmt.get(orderId);
+    if (order && order.chatId) {
+      const doneMessage = `Order Successful! ✅\nဝယ်ယူအားပေးမှုအတွက်ကျေးဇူးအထူးတင်ပါတယ်ခင်ဗျာ\nနောက်လည်းအားပေးပါဦးခင်ဗျာ! 🙏`;
+      await bot.telegram.sendMessage(order.chatId, doneMessage);
+    }
+  } catch (err) {
+    console.error('Error updating status:', err.message);
+  }
+});
 
 // Start command with inline keyboard buttons
 bot.start(async (ctx) => {
