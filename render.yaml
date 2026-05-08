@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: telegram-order-bot
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: BOT_TOKEN
+        value: 8631391925:AAHM3PvdT-NTFrA0GjaUCyvtJGfsKK-I7zc
+      - key: OWNER_ID
+        value: 7844505819
