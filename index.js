@@ -401,7 +401,96 @@ bot.command('orders', async (ctx) => {
 
 bot.command('status', (ctx) => ctx.scene.enter('statusScene'));
 
+// Broadcast command - send message to all customers
+bot.command('broadcast', async (ctx) => {
+  if (String(ctx.from.id) !== OWNER_ID) {
+    return ctx.reply(messages.ownerOnly);
+  }
+  ctx.session.broadcast = true;
+  await ctx.reply('📢 Broadcast message ရိုက်ပါ (text သို့မဟုတ် ပုံ+caption ပို့ပါ):\n\nပယ်ဖျက်ရန် /cancel ပို့ပါ');
+});
+
+bot.command('cancel', async (ctx) => {
+  if (ctx.session && ctx.session.broadcast) {
+    ctx.session.broadcast = false;
+    await ctx.reply('Broadcast ပယ်ဖျက်ပြီးပါပြီ။');
+  }
+});
+
+// Handle broadcast photo
+bot.on('photo', async (ctx) => {
+  if (ctx.session && ctx.session.broadcast && String(ctx.from.id) === OWNER_ID) {
+    ctx.session.broadcast = false;
+    const photo = ctx.message.photo[ctx.message.photo.length - 1];
+    const caption = ctx.message.caption || '';
+    
+    try {
+      const stmt = db.prepare(`SELECT DISTINCT chatId FROM orders WHERE chatId IS NOT NULL AND chatId != ''`);
+      const customers = stmt.all();
+      
+      if (customers.length === 0) {
+        return ctx.reply('Customer မရှိသေးပါ။');
+      }
+      
+      let sent = 0;
+      let failed = 0;
+      
+      for (const customer of customers) {
+        try {
+          await bot.telegram.sendPhoto(customer.chatId, photo.file_id, { caption: caption });
+          sent++;
+        } catch (err) {
+          failed++;
+        }
+      }
+      
+      await ctx.reply(`📢 Broadcast ပြီးပါပြီ!\n✅ ပို့ပြီး: ${sent}\n❌ မရောက်: ${failed}\n📊 စုစုပေါင်း: ${customers.length}`);
+    } catch (err) {
+      console.error('Broadcast error:', err.message);
+      await ctx.reply('Broadcast လုပ်ရာတွင် error ဖြစ်ပါသည်။');
+    }
+    return;
+  }
+  
+  // If in order scene, let scene handle it
+});
+
 bot.on('text', (ctx) => {
+  // Handle broadcast text
+  if (ctx.session && ctx.session.broadcast && String(ctx.from.id) === OWNER_ID) {
+    ctx.session.broadcast = false;
+    const message = ctx.message.text;
+    
+    (async () => {
+      try {
+        const stmt = db.prepare(`SELECT DISTINCT chatId FROM orders WHERE chatId IS NOT NULL AND chatId != ''`);
+        const customers = stmt.all();
+        
+        if (customers.length === 0) {
+          return ctx.reply('Customer မရှိသေးပါ။');
+        }
+        
+        let sent = 0;
+        let failed = 0;
+        
+        for (const customer of customers) {
+          try {
+            await bot.telegram.sendMessage(customer.chatId, message);
+            sent++;
+          } catch (err) {
+            failed++;
+          }
+        }
+        
+        await ctx.reply(`📢 Broadcast ပြီးပါပြီ!\n✅ ပို့ပြီး: ${sent}\n❌ မရောက်: ${failed}\n📊 စုစုပေါင်း: ${customers.length}`);
+      } catch (err) {
+        console.error('Broadcast error:', err.message);
+        await ctx.reply('Broadcast လုပ်ရာတွင် error ဖြစ်ပါသည်။');
+      }
+    })();
+    return;
+  }
+  
   if (!ctx.message.text.startsWith('/')) {
     ctx.reply(messages.invalidCommand);
   }
